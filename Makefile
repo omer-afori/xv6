@@ -32,6 +32,7 @@ OBJS = \
   $K/plic.o \
   $K/virtio_disk.o
 
+
 OBJS_KCSAN = \
   $K/start.o \
   $K/console.o \
@@ -188,7 +189,9 @@ UPROGS=\
 	$U/_grind\
 	$U/_wc\
 	$U/_zombie\
-
+	$U/_sleep\
+	$U/_trace\
+	$U/_sysinfotest\
 
 
 

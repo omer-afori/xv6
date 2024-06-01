@@ -5,6 +5,28 @@
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
+#include "sysinfo.h"
+#include "kalloc.h"
+uint64
+sys_trace(void)
+{
+	argint(0, &(myproc()->tracemask));
+	return 0;
+}
+
+uint64
+sys_sysinfo(void){
+  uint64 sysinfo;
+  struct sysinfo info_struct;
+  argaddr(0, &sysinfo); //this is the pointer for the struct
+  info_struct.nproc = nproc();
+  info_struct.freemem = freemem();
+  if (copyout(myproc()->pagetable, sysinfo ,(char*)&info_struct, sizeof(info_struct)) < 0) {
+    return -1;
+  }
+  return 0;
+}
+
 
 uint64
 sys_exit(void)

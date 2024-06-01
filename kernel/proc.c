@@ -1,4 +1,4 @@
-#include "types.h"
+  #include "types.h"
 #include "param.h"
 #include "memlayout.h"
 #include "riscv.h"
@@ -299,6 +299,7 @@ fork(void)
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
 
+  np->tracemask = p->tracemask;
   // Cause fork to return 0 in the child.
   np->trapframe->a0 = 0;
 
@@ -680,4 +681,18 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+
+int nproc(void){
+  int n = 0;
+  struct proc *p;
+  for (p = proc; p < &proc[NPROC]; p++) {
+    acquire(&p->lock);
+    if (p->state != UNUSED) {
+      n++;
+    }
+    release(&p->lock);
+  }
+  return n;
 }
