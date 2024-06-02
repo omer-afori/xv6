@@ -71,9 +71,36 @@ sys_sleep(void)
 
 
 #ifdef LAB_PGTBL
+//gets starting virtual address and number of pages, and a user address to store results in a bitmask (first page is LSB)
+//needs to check which page has been accessed, and set the bitmask accordingly. also set the PTE to not accessed.
 int
 sys_pgaccess(void)
 {
+
+  uint64 start_addr;
+  int pages;
+  uint64 bitmask_addr;
+  uint64 addr;
+  argaddr(0, &start_addr);
+  argint(1, &pages);
+  argaddr(2, &bitmask_addr);
+  uint64 mask_to_return = 0;
+
+  for (int i = 0; i < pages; i++){
+    addr = start_addr + (i * PGSIZE);
+    uint64* pte = walk(myproc()->pagetable, addr, 0); //get the PTE
+    if (pte == 0){
+      return -1;
+    }
+    if (*pte & PTE_A){
+      *pte = *pte & (~PTE_A); //remove accessed bit
+      mask_to_return |= (1 << i);
+    }
+  }
+  //copy the mask_to_return to the bitmask_addr:
+  if (copyout(myproc()->pagetable, bitmask_addr, (char *)&mask_to_return, sizeof(mask_to_return)) < 0){
+    return -1;
+  }
   // lab pgtbl: your code here.
   return 0;
 }

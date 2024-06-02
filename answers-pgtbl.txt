@@ -1,0 +1,4 @@
+other system calls that could be made faster using such methods are calls for getting information about proccesses -
+for example just like getpid() was optimized, syscalls for getting other data such as parent pid or creation time could be optimized
+
+the first pages are kernel, so user mode can't access them.

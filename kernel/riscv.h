@@ -344,6 +344,7 @@ typedef uint64 *pagetable_t; // 512 PTEs
 #define PTE_X (1L << 3)
 #define PTE_U (1L << 4) // user can access
 
+#define PTE_A (1L << 6) //figure 3.2 in the XV6 book, page 33 in the PDF. 7th bit is accessed (Starts from 0, so 6)
 // shift a physical address to the right place for a PTE.
 #define PA2PTE(pa) ((((uint64)pa) >> 12) << 10)
 
