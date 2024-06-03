@@ -80,7 +80,7 @@ usertrap(void)
   if(which_dev == 2){
     if (++(p->ticks_passed) >= p->interval && p->my_bool == 1){
       *(p->frame) = *(p->trapframe);
-      p->trapframe->epc = p->handler;
+      p->trapframe->epc = (uint64)p->handler;
       p->my_bool = 0;
     }
     yield();
