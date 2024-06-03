@@ -1,0 +1,17 @@
+
+there is no call to f and g
+
+printf is at: 0000000000000652
+"0000000000000652 <printf>:"
+(line from the asm file)
+
+ra holds next instruction address
+
+it prints:
+He110 World
+
+x shouldnt be changed since it is printed by its value, little or small endian doesn't change anything
+i should be changed: from 0x00646c72
+it should change to 726c6400
+
+it will print some garbage values? for me it was -9016
