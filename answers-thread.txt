@@ -1,0 +1,6 @@
+the problem lies in the end of the put() function. 
+when running 2 threads in parallel, it is possible for a context switch to happen right after, or during, the call to insert
+
+    meaning in the line:     insert(key, value, &table[i], table[i]);
+
+because there are no locks, and because the table only has 5 indexes (modulu of 5) it becomes very common
