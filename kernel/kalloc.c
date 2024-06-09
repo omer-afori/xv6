@@ -21,13 +21,13 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
-} kmem[NCPU];
+} kmem[NCPU]; //turn it into an array
 
 void
 kinit()
 {
   for (int i = 0; i < NCPU; i++) {
-    initlock(&kmem[i].lock, "kmem");
+    initlock(&kmem[i].lock, "kmem"); //init each one - the name 'kmem' is sufficient according to the instructions
   }
   freerange(end, (void*)PHYSTOP);
 }
@@ -75,31 +75,27 @@ kalloc(void)
   struct run *r;
   int pid;
   int i;
-  //int found_block = 0;
+
+
   push_off(); 
   pid = cpuid();
   acquire(&kmem[pid].lock);
-  if((r = kmem[pid].freelist) != 0) {
+  if((r = kmem[pid].freelist) != 0) { //if it is not empty, simply allocate from it
     kmem[pid].freelist = r->next;
   }
   release(&kmem[pid].lock); 
-  if (r == 0){
+  if (r == 0){ //if the list is empty, steal from other cpu
     for (i = 0; i < NCPU; i++){
-      if (i != pid){
+      if (i != pid){ //make sure not trying to steal from itself
         acquire(&kmem[i].lock);
-        if((r = kmem[i].freelist) != 0) {
+        if((r = kmem[i].freelist) != 0) { //if it is not empty, simply allocate from it
           kmem[i].freelist = r->next;
           release(&kmem[i].lock);
-          //found_block = 1;
           break;
         }
         release(&kmem[i].lock);
       }
     }
-    // If no free block is found in other CPUs (which should never happen)
-    /*if (found_block == 0){
-      panic("kalloc");
-    }*/
   }
   pop_off();
 
