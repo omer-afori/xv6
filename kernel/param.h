@@ -24,4 +24,5 @@
 #endif
 #define MAXPATH      128   // maximum file path name
 
+#define THRESHOLD 10 //for max recursive depth of symlinks
 

@@ -334,7 +334,24 @@ sys_open(void)
       return -1;
     }
   }
+  int iter_count = 0;
+  if(ip->type == T_SYMLINK && !(omode & O_NOFOLLOW)){
+    while (ip->type == T_SYMLINK && !(omode & O_NOFOLLOW)){
+      if(++iter_count > THRESHOLD){
+        iunlockput(ip);
+        end_op();
+        return -1;
+      }
+      readi(ip, 0, (uint64)path, 0, MAXPATH);
+      iunlockput(ip);
 
+      if((ip = namei(path)) == 0){
+        end_op();
+        return -1;
+      }
+      ilock(ip);
+    }
+  }
   if(ip->type == T_DEVICE && (ip->major < 0 || ip->major >= NDEV)){
     iunlockput(ip);
     end_op();
@@ -501,5 +518,34 @@ sys_pipe(void)
     fileclose(wf);
     return -1;
   }
+  return 0;
+}
+
+uint64 sys_symlink(void){
+
+  char target[MAXPATH];
+  char path[MAXPATH];
+  struct inode *ip;
+  int length;
+  if (argstr(0, target, MAXPATH) < 0){
+    return -1;
+  }
+  length = argstr(1, path, MAXPATH);
+  if (length < 0){
+    return -1;
+  }
+  begin_op();
+
+  //create the actual symbolic link, returned locked
+  if ((ip = create(path, T_SYMLINK,0,0)) == 0){
+    end_op();
+    return -1;
+  }
+
+  if (writei(ip, 0, (uint64)target, 0, length) < length){
+    panic("error in writing symlink path in file");
+  }
+  iunlockput(ip);
+  end_op();
   return 0;
 }
