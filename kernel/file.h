@@ -26,7 +26,8 @@ struct inode {
   short minor;
   short nlink;
   uint size;
-  uint addrs[NDIRECT+1];
+  //I decreased NDIRECT by 1 so I need to raise it here so there is enough space allocated for all pointers
+  uint addrs[NDIRECT+2]; 
 };
 
 // map major device number to device functions.
