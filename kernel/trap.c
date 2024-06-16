@@ -29,6 +29,33 @@ trapinithart(void)
   w_stvec((uint64)kernelvec);
 }
 
+int cow_handler(uint64 virt_addr){
+  if (virt_addr >= MAXVA){
+    return -1;
+  }
+
+  struct proc *p = myproc();
+  pte_t *pte = walk(p->pagetable, virt_addr, 0);
+  if (pte == 0){
+    return -1;
+  }
+  uint flags = PTE_FLAGS(*pte);
+  if ((flags & PTE_RSW) == 0){
+    return -1;
+  }
+
+  void* addr = kalloc();
+  if (addr == 0){
+    return -1;
+  }
+  flags |= PTE_W;
+  flags &= ~PTE_RSW;
+  void* old_addr = (void*)PTE2PA(*pte);
+  memmove(addr, old_addr, PGSIZE);
+  kfree(old_addr);
+  *pte = PA2PTE(addr) | flags;
+  return 0;
+}
 //
 // handle an interrupt, exception, or system call from user space.
 // called from trampoline.S
@@ -65,6 +92,13 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if(r_scause() == 15) {
+    if (p->killed == 1){
+      exit(-1);
+    }
+    if (cow_handler(r_stval()) < 0){
+      p->killed = 1;
+    }
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
