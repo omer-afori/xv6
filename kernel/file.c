@@ -180,3 +180,12 @@ filewrite(struct file *f, uint64 addr, int n)
   return ret;
 }
 
+
+struct file* file_reference_dec(struct file* f) {
+  acquire(&ftable.lock);
+  if (f->ref < 1)
+    panic("reference_dec");
+  f->ref--;
+  release(&ftable.lock);
+  return f;
+}

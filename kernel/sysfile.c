@@ -503,3 +503,127 @@ sys_pipe(void)
   }
   return 0;
 }
+
+uint64
+sys_mmap(void){
+//I can assume addr and offest are zero so I need length, prot, flags and fd
+  uint64 fail_addr = -1;//0xffffffffffffffff;
+  void* addr;
+  uint64 length, offset;
+  int prot, flags, fd;
+  struct file *file;
+  argaddr(0, (void *)&addr);
+  arguint64(1, &length);
+  argint(2, &prot);
+  argint(3, &flags);
+  argfd(4, &fd, &file);  
+  arguint64(5, &offset);
+  struct proc *p = myproc();
+  //file = p->ofile[fd];
+  if(file->writable == 0 && (prot & PROT_WRITE) && (flags & MAP_SHARED)){
+    printf("write\n");
+    return fail_addr;
+  }
+  if(file->readable == 0 && (prot & PROT_READ)){
+    printf("read\n");
+    return fail_addr;
+  }
+  
+  for (int i = 0; i < VMA_COUNT; ++i){
+    if(p->vma_list[i].mapped == 1)
+      continue;
+    addr = (void *)PGROUNDDOWN(p->mmap_max - length);
+    p->vma_list[i].mapped = 1;
+    p->vma_list[i].start_address = addr;
+    p->vma_list[i].length = length;
+    p->vma_list[i].prot = prot;
+    p->vma_list[i].flags = flags;
+    p->vma_list[i].fd = fd;
+    p->vma_list[i].file = file;
+    p->vma_list[i].offset = offset;
+    p->mmap_max = (uint64)addr;
+    filedup(file);
+    return (uint64)addr;
+    
+  }
+  return fail_addr;
+}
+
+uint64
+sys_munmap(void){
+  void *addr;
+  uint64 length;
+  argaddr(0, (void *)&addr);
+  arguint64(1, &length);
+
+  uint64 st = PGROUNDDOWN((uint64)addr);
+  uint64 end = PGROUNDUP((uint64)addr + length);
+  struct proc *p = myproc();
+  struct vma *vma = 0;
+
+
+  for (int i = 0; i < VMA_COUNT; ++i){
+    if(p->vma_list[i].mapped == 0)
+      continue;
+    uint64 vma_end = PGROUNDUP((uint64)p->vma_list[i].start_address + p->vma_list[i].length);
+    if(st >= (uint64)p->vma_list[i].start_address && end <= vma_end){
+      vma = &p->vma_list[i];
+      break;
+    }
+  }
+  if (vma == 0){
+    printf("bad range\n");
+    return -1;
+  }
+
+  struct file *file = vma->file;
+  if (vma->flags & MAP_SHARED){
+    if (file->writable == 0){
+      printf("bad write\n");
+      return -1;
+    }
+    for (uint j = 0; j < end - st; j += PGSIZE) {
+      pte_t *pte = walk(p->pagetable, st+j, 0);
+      if (pte == 0){
+        panic("walk failed");
+      }
+      if ((*pte & PTE_V) == 0)
+        continue;
+      begin_op();
+      ilock(file->ip);
+
+      if (writei(file->ip, 1, st+j, st+j-(uint64)vma->start_address + vma->offset, PGSIZE) != PGSIZE){
+        iunlockput(file->ip);
+        end_op();
+        printf("write fail\n");
+        return -1;
+      }
+      iunlockput(file->ip);
+      end_op();
+    }
+  }
+
+  for (uint64 j = st; j < end; j += PGSIZE){
+    pte_t *pte = walk(p->pagetable, j, 0);
+    if (pte == 0)
+      panic("walk failed");
+    if ((*pte & PTE_V) == 0)
+      continue;
+    uvmunmap(p->pagetable, j, 1, 1);
+  }
+
+  uint64 vma_end = PGROUNDUP((uint64)vma->start_address +vma->length);
+  if (st == (uint64)vma->start_address && end == vma_end){
+    file_reference_dec(file);
+    vma->mapped = 0;
+  } else if (st == (uint64)vma->start_address && end < vma_end) {
+    vma->start_address =(void *)end;
+    vma->length -= end - st;
+    vma->offset += end - st;
+  } else if (st > (uint64)vma->start_address && end == vma_end) {
+    vma->length = st - (uint64)vma->start_address; 
+  } else {
+    panic("error in range - punctures a hole in the range");
+  }
+  return 0;
+}

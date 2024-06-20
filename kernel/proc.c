@@ -5,6 +5,10 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "sleeplock.h"
+#include "fs.h"
+#include "file.h"
+#include "fcntl.h"
 
 struct cpu cpus[NCPU];
 
@@ -41,6 +45,20 @@ proc_mapstacks(pagetable_t kpgtbl)
     uint64 va = KSTACK((int) (p - proc));
     kvmmap(kpgtbl, va, (uint64)pa, PGSIZE, PTE_R | PTE_W);
   }
+}
+
+void copy_vma_struct(struct vma* source, struct vma* destination){
+  destination->start_address = source->start_address;
+  destination->flags = source->flags;
+  destination->prot = source->prot;
+  destination->mapped = source->mapped;
+  destination->offset = source->offset;
+  destination->fd = source->fd;
+  destination->file = source->file;
+
+  source->file->ref++;
+  destination->length = source->length;
+  return;
 }
 
 // initialize the proc table.
@@ -145,7 +163,7 @@ found:
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
-
+  p->mmap_max = (MAXVA - 2 * PGSIZE);
   return p;
 }
 
@@ -169,6 +187,7 @@ freeproc(struct proc *p)
   p->killed = 0;
   p->xstate = 0;
   p->state = UNUSED;
+  p->mmap_max = 0;
 }
 
 // Create a user page table for a given process, with no user memory,
@@ -280,6 +299,7 @@ int
 fork(void)
 {
   int i, pid;
+  int idx;
   struct proc *np;
   struct proc *p = myproc();
 
@@ -295,6 +315,16 @@ fork(void)
     return -1;
   }
   np->sz = p->sz;
+  idx = 0;
+  for (i = 0; i < VMA_COUNT; i++) {
+    if(p->vma_list[i].mapped == 0)
+      continue;
+    
+    printf("testfork 1\n");
+    copy_vma_struct(&p->vma_list[i], &np->vma_list[idx++]);
+    filedup(p->vma_list[i].file);
+
+  }
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
@@ -360,6 +390,23 @@ exit(int status)
     }
   }
 
+  for (int i = 0; i < VMA_COUNT; ++i) {
+    struct vma* vma = &p->vma_list[i];
+    if (vma->mapped == 0)
+      continue;
+
+    uint64 st = (uint64)vma->start_address;
+    uint64 end = PGROUNDUP((uint64)st + vma->length);
+    vma->mapped = 0;
+    for (uint64 i = st; i < end; i += PGSIZE){
+      pte_t *pte = walk(p->pagetable, i, 0);
+      if (pte == 0)
+        panic("pte error");
+      if ((*pte & PTE_V) == 0)
+        continue;
+      uvmunmap(p->pagetable, i, 1 ,1);
+    }
+  }
   begin_op();
   iput(p->cwd);
   end_op();

@@ -5,7 +5,10 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
-
+#include "sleeplock.h"
+#include "fs.h"
+#include "file.h"
+#include "fcntl.h"
 struct spinlock tickslock;
 uint ticks;
 
@@ -65,6 +68,75 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if (r_scause() == 13 || r_scause() == 15) {   
+    uint64 scause = r_scause();
+    uint64 addr = r_stval();
+    if (addr >= MAXVA) {
+      printf("SHOULDNT BE HERE\n");
+      exit(-1);
+    }
+    struct vma* vma = 0;
+    for (int i = 0; i < VMA_COUNT; ++i){
+      if(p->vma_list[i].mapped == 0)
+        continue;
+      uint64 st = (uint64)p->vma_list[i].start_address;
+      uint64 end = st + p->vma_list[i].length;
+      if (addr >= st && addr < end){
+        vma = &p->vma_list[i];
+        break;
+      }
+    }
+
+    if (vma == 0){
+      printf("address error\n");
+      p->killed = 1;
+      exit(-1);
+    }
+
+    if (scause == 13 && vma->file->readable == 0) {
+      printf("trap - read\n");
+      p->killed = 1;
+      exit(-1);
+    }
+
+    if (scause == 15 && vma->file->writable == 0) {
+      printf("trap - write\n");
+      p->killed = 1;
+      exit(-1);
+    }
+
+    void* phys_address = kalloc();
+    if (phys_address == 0){
+      printf("kalloc error\n");
+      p->killed = 1;
+      exit(-1);
+    }
+    memset(phys_address, 0, PGSIZE);
+    int permissions = 0;
+    addr = PGROUNDDOWN(addr);
+    permissions |= PTE_U;
+    permissions |= PTE_V;
+    if (vma->prot & PROT_READ)
+      permissions |= PTE_R;
+    if (vma->prot & PROT_WRITE)
+      permissions |= PTE_W;
+    if (vma->prot & PROT_EXEC)
+      permissions |= PTE_X;
+    if (mappages(p->pagetable, addr, PGSIZE, (uint64)phys_address, permissions) != 0) {
+      kfree(phys_address);
+      printf("mmapages error\n");
+      p->killed = 1;
+      exit(-1);
+    }
+    ilock(vma->file->ip);
+    if (readi(vma->file->ip, 1, addr, addr - (uint64)vma->start_address + vma->offset, PGSIZE) == 0) {
+      iunlock(vma->file->ip);
+      uvmunmap(p->pagetable, addr, 1, 1);
+      printf("readi error\n");
+      p->killed = 1;
+      exit(-1);
+    }
+    iunlock(vma->file->ip);
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
